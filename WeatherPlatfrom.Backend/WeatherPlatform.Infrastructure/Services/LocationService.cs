@@ -69,7 +69,8 @@ namespace WeatherPlatform.Infrastructure.Services
                 Temp = ws.Temperature,
                 Humidity = ws.Humidity,
                 Description = ws.Description,
-                LastSyncedAt = ws.CreatedAt
+                LastSyncedAt = ws.CreatedAt,
+                IsFavorite = ws.Location.IsFavorite
             }).ToList();
 
             return snapshots;

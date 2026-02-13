@@ -16,6 +16,7 @@ namespace WeatherPlatform.Domain.Dtos
         public decimal Temp { get; set; }
         public int Humidity { get; set; }
         public string Description { get; set; }
+        public bool IsFavorite { get; set; }
         public DateTime LastSyncedAt { get; set; }
     }
 }

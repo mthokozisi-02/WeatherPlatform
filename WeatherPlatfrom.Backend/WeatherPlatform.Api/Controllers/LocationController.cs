@@ -24,13 +24,13 @@ namespace WeatherPlatform.Api.Controllers
             return Ok(await _locationService.UpdateLocation(update));
         }
 
-        [HttpDelete("delete-location")]
+        [HttpDelete("delete-location/{id}")]
         public async Task<IActionResult> DeleteLocation(int id)
         {
             return Ok(await _locationService.DeleteLocation(id));
         }
 
-        [HttpGet("get-all_locations")]
+        [HttpGet("get-all-locations")]
         public async Task<IActionResult> GetAll()
         {
             return Ok(await _locationService.GetAll());
