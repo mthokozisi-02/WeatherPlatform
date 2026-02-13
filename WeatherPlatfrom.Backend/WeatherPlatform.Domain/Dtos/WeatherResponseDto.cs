@@ -12,6 +12,7 @@ namespace WeatherPlatform.Domain.Dtos
         public WeatherInfo[] weather { get; set; } = null!;
         public SystemInfo sys { get; set; } = null!;
         public Coordinates coord { get; set; } = null!;
+        public DateTime dt_txt { get; set; }
 
         public class MainInfo
         {

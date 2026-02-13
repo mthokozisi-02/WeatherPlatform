@@ -34,6 +34,7 @@ namespace WeatherPlatform.Infrastructure.Services
                 await _weatherPlatfromDbContext.SaveChangesAsync();
 
                 await _weatherService.RefreshWeather(location.Id);
+                await _weatherService.RefreshForecast(location.Id);
                 return weatherResponse;
             }
             else

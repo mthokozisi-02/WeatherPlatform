@@ -11,5 +11,8 @@ namespace WeatherPlatform.Infrastructure.Interfaces
     {
         Task<WeatherResponseDto> GetCurrentWeather(string city);
         Task<string> RefreshWeather (int locationId);
+        Task<ForecastWeatherResponseDto> GetForecast (string city);
+
+        Task<ForecastWeatherResponseDto> RefreshForecast(int locationId);
     }
 }

@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using System.Threading.RateLimiting;
 using WeatherPlatform.Infrastructure.DbContexts;
 using WeatherPlatform.Infrastructure.Interfaces;
 using WeatherPlatform.Infrastructure.Services;
@@ -17,6 +19,20 @@ builder.Services.AddDbContext<WeatherPlatfromDbContext>(options =>
     );
 });
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("fixed", opt =>
+    {
+        opt.PermitLimit = 20;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 5;
+    });
+});
+
+builder.Services.AddMemoryCache();
+
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -31,6 +47,8 @@ if (app.Environment.IsDevelopment())
 {
     
 }
+
+app.UseRateLimiter();
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();

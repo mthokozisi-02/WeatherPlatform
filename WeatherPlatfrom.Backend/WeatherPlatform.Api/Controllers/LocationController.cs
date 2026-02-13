@@ -1,9 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using WeatherPlatform.Domain.Dtos;
 using WeatherPlatform.Infrastructure.Interfaces;
 
 namespace WeatherPlatform.Api.Controllers
 {
+    [EnableRateLimiting("fixed")]
     [ApiController]
     [Route("api/")]
     public class LocationController(ILocationService locationService) : Controller

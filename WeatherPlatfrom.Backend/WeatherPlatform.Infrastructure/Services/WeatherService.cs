@@ -1,9 +1,11 @@
 ﻿using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -15,14 +17,20 @@ using WeatherPlatform.Infrastructure.Interfaces;
 
 namespace WeatherPlatform.Infrastructure.Services
 {
-    public class WeatherService(HttpClient httpClient, IConfiguration configuration, WeatherPlatfromDbContext weatherPlatfromDbContext) : IWeatherService
+    public class WeatherService(HttpClient httpClient, IConfiguration configuration, WeatherPlatfromDbContext weatherPlatfromDbContext, IMemoryCache cache) : IWeatherService
     {
         private readonly HttpClient _httpClient = httpClient;
         private readonly IConfiguration _configuration = configuration;
         private readonly WeatherPlatfromDbContext _weatherPlatfromDbContext = weatherPlatfromDbContext;
+        private readonly IMemoryCache _memoryCache = cache;
 
         public async Task<WeatherResponseDto> GetCurrentWeather(string city)
         {
+            var cacheKey = $"weather_{city.ToLowerInvariant()}";
+
+            if (_memoryCache.TryGetValue(cacheKey, out WeatherResponseDto cached))
+                return cached;
+
             var apiKey = _configuration["WeatherApi:ApiKey"];
 
             var response = await _httpClient.GetAsync($"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={apiKey}&units=metric");
@@ -43,7 +51,11 @@ namespace WeatherPlatform.Infrastructure.Services
             }
 
             var content = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<WeatherResponseDto>(content)!;
+            var result =  JsonSerializer.Deserialize<WeatherResponseDto>(content)!;
+
+            _memoryCache.Set(cacheKey, result, TimeSpan.FromMinutes(10));
+
+            return result;
         }
 
         public async Task<string> RefreshWeather(int locationId)
@@ -76,6 +88,53 @@ namespace WeatherPlatform.Infrastructure.Services
                 return ex.Message;
             }
             
+        }
+
+        public async Task<ForecastWeatherResponseDto> GetForecast(string city)
+        {
+            var apiKey = _configuration["WeatherApi:ApiKey"];
+
+            var response = await _httpClient.GetAsync(
+                $"https://api.openweathermap.org/data/2.5/forecast?q={city}&appid={apiKey}&units=metric"
+            );
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception("Failed to fetch forecast");
+
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonSerializer.Deserialize<ForecastWeatherResponseDto>(content)!;
+        }
+
+        public async Task<ForecastWeatherResponseDto> RefreshForecast(int locationId)
+        {
+            var location = _weatherPlatfromDbContext.Locations
+                .FirstOrDefault(l => l.Id == locationId) ?? throw new Exception("Location not found");
+
+            var forecast = await GetForecast(location.City);
+
+            foreach (var item in forecast.list)
+            {
+                var snapshot = new ForecastSnapshot
+                {
+                    LocationId = locationId,
+                    Temperature = item.main.temp,
+                    Humidity = item.main.humidity,
+                    Description = item.weather.First().description,
+                    ForecastDate = DateTime.ParseExact(
+                                item.dt_txt,
+                                "yyyy-MM-dd HH:mm:ss",
+                                CultureInfo.InvariantCulture
+                            ),
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _weatherPlatfromDbContext.AddAsync(snapshot);
+            }
+
+            await _weatherPlatfromDbContext.SaveChangesAsync();
+
+            return forecast;
         }
     }
 }
