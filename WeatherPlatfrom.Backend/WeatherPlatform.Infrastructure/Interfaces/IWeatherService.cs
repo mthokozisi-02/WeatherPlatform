@@ -10,5 +10,6 @@ namespace WeatherPlatform.Infrastructure.Interfaces
     public interface IWeatherService
     {
         Task<WeatherResponseDto> GetCurrentWeather(string city);
+        Task<string> RefreshWeather (int locationId);
     }
 }

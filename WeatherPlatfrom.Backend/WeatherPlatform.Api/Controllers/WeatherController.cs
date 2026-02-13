@@ -14,5 +14,11 @@ namespace WeatherPlatform.Api.Controllers
         {
             return Ok(await _weatherService.GetCurrentWeather(city));
         }
+
+        [HttpPost("refresh-weather")]
+        public async Task<IActionResult> RefreshWeather(int locationId)
+        {
+            return Ok(await _weatherService.RefreshWeather(locationId));
+        }
     }
 }
