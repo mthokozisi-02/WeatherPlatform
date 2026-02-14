@@ -22,6 +22,7 @@ import { Product, ProductService } from '../service/product.service';
 import { WeatherResponse } from 'src/assets/interfaces/weather-response';
 import { LocationService } from 'src/assets/services/location-service';
 import { catchError, finalize, tap, throwError } from 'rxjs';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
 
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { UpdateLocation } from 'src/assets/interfaces/update-location';
@@ -34,6 +35,7 @@ import { ForecastWeatherResponse } from 'src/assets/interfaces/forecast-weather-
     standalone: true,
     imports: [
         CommonModule,
+        ProgressSpinnerModule,
         TableModule,
         FormsModule,
         ButtonModule,
@@ -53,11 +55,14 @@ import { ForecastWeatherResponse } from 'src/assets/interfaces/forecast-weather-
         ConfirmDialogModule
     ],
     template: `
+        <div *ngIf="isLoading" style="position: fixed; top: 0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999">
+            <p-progressSpinner></p-progressSpinner>
+        </div>
         <p-toolbar styleClass="mb-6">
             <ng-template #start>
                 <p-button label="New" icon="pi pi-plus" severity="secondary" class="mr-2" (onClick)="openNew()" />
-                <p-button label="Check Weather" icon="pi pi-search" class="mr-2" (click)="checkWeather()" />
-                <p-button label="Check Forecast" icon="pi pi-search" (click)="checkForecast()" />
+                <p-button label="Check Weather" icon="pi pi-search" severity="warn" class="mr-2" (click)="checkWeather()" />
+                <p-button label="Check Forecast" icon="pi pi-search" severity="help" (click)="checkForecast()" />
             </ng-template>
         </p-toolbar>
 
@@ -116,8 +121,8 @@ import { ForecastWeatherResponse } from 'src/assets/interfaces/forecast-weather-
                     <td>
                         <p-button icon="pi pi-pencil" class="mr-2" [rounded]="true" [outlined]="true" (click)="editLocation(location)" />
                         <p-button icon="pi pi-trash" severity="danger" class="mr-2" [rounded]="true" [outlined]="true" (click)="deleteLocation(location)" />
-                        <p-button label="Sync" [rounded]="true" [outlined]="true" class="mr-2" (click)="refreshWeather(location)" />
-                        <p-button label="Forecast" [rounded]="true" [outlined]="true" (click)="viewForecast(location)" />
+                        <p-button label="Sync" severity="warn" [rounded]="true" [outlined]="true" class="mr-2" (click)="refreshWeather(location)" />
+                        <p-button label="Forecast" [rounded]="true" severity="help" [outlined]="true" (click)="viewForecast(location)" />
                     </td>
                 </tr>
             </ng-template>
@@ -321,6 +326,26 @@ export class Crud implements OnInit {
 
     private destroyRef = inject(DestroyRef);
 
+    private showSuccess(message: string) {
+        this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: message,
+            life: 3000
+        });
+    }
+
+    private showError(error: any) {
+        const message = error?.error?.message || error?.error || error?.message || 'Something went wrong. Please try again.';
+
+        this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: message,
+            life: 4000
+        });
+    }
+
     constructor(
         private locationService: LocationService,
         private messageService: MessageService,
@@ -338,24 +363,12 @@ export class Crud implements OnInit {
         this.locationService
             .getAll()
             .pipe(
-                tap((res) => {
-                    this.locations.set(res);
-                    console.log('Retrieved successfully:', res);
-                }),
-
+                tap((res) => this.locations.set(res)),
                 catchError((err) => {
-                    this.messageService.add({
-                        severity: 'fail',
-                        summary: 'Successful',
-                        detail: err,
-                        life: 3000
-                    });
-                    return throwError(() => err);
+                    this.showError(err);
+                    return [];
                 }),
-
-                finalize(() => {
-                    this.isLoading = false;
-                }),
+                finalize(() => (this.isLoading = false)),
                 takeUntilDestroyed(this.destroyRef)
             )
             .subscribe();
@@ -385,47 +398,26 @@ export class Crud implements OnInit {
     }
 
     updateLocation() {
-        this.submitted = true;
         this.isLoading = true;
 
-        if (this.favorite === 'true') {
-            this.location.isFavorite = true;
-        } else {
-            this.location.isFavorite = false;
-        }
+        this.location.isFavorite = this.favorite === 'true';
 
         this.locationService
             .updateLocation(this.location)
             .pipe(
-                tap((res) => {
-                    console.log('Updated successfully:', res);
-                    this.messageService.add({
-                        severity: 'success',
-                        summary: 'Successful',
-                        detail: 'Product Updated',
-                        life: 3000
-                    });
+                tap(() => {
+                    this.showSuccess('Location updated successfully');
+                    this.updateLocationDialog = false;
+                    this.loadLocations();
                 }),
-
                 catchError((err) => {
-                    this.messageService.add({
-                        severity: 'fail',
-                        summary: 'Not Successful',
-                        detail: 'location not updated',
-                        life: 3000
-                    });
-                    return throwError(() => err);
+                    this.showError(err);
+                    return [];
                 }),
-
-                finalize(() => {
-                    this.ngOnInit();
-                    this.isLoading = false;
-                }),
+                finalize(() => (this.isLoading = false)),
                 takeUntilDestroyed(this.destroyRef)
             )
             .subscribe();
-
-        this.updateLocationDialog = false;
     }
 
     hideDialog() {
@@ -440,37 +432,24 @@ export class Crud implements OnInit {
 
     deleteLocation(location: WeatherSnapshotResponse) {
         this.confirmationService.confirm({
-            message: 'Are you sure you want to delete ' + location.city + '?',
+            message: `Are you sure you want to delete ${location.city}?`,
             header: 'Confirm',
             icon: 'pi pi-exclamation-triangle',
             accept: () => {
+                this.isLoading = true;
+
                 this.locationService
                     .deleteLocation(location.id)
                     .pipe(
-                        tap((res) => {
-                            console.log('Deleted successfully:', res);
-                            this.messageService.add({
-                                severity: 'success',
-                                summary: 'Successful',
-                                detail: 'Product Created',
-                                life: 3000
-                            });
+                        tap(() => {
+                            this.showSuccess('Location deleted successfully');
+                            this.loadLocations();
                         }),
-
                         catchError((err) => {
-                            this.messageService.add({
-                                severity: 'fail',
-                                summary: 'Successful',
-                                detail: err,
-                                life: 3000
-                            });
-                            return throwError(() => err);
+                            this.showError(err);
+                            return [];
                         }),
-
-                        finalize(() => {
-                            this.ngOnInit();
-                            this.isLoading = false;
-                        }),
+                        finalize(() => (this.isLoading = false)),
                         takeUntilDestroyed(this.destroyRef)
                     )
                     .subscribe();
@@ -479,76 +458,52 @@ export class Crud implements OnInit {
     }
 
     saveLocation() {
-        this.submitted = true;
+        if (!this.newLocation) {
+            this.showError('City name is required');
+            return;
+        }
+
         this.isLoading = true;
 
         this.locationService
             .createLocation(this.newLocation)
             .pipe(
-                tap((res) => {
-                    console.log('Retrieved successfully:', res);
-                    this.messageService.add({
-                        severity: 'success',
-                        summary: 'Successful',
-                        detail: 'Product Created',
-                        life: 3000
-                    });
+                tap(() => {
+                    this.showSuccess('Location created successfully');
+                    this.locationDialog = false;
+                    this.loadLocations();
                 }),
-
                 catchError((err) => {
-                    this.messageService.add({
-                        severity: 'fail',
-                        summary: 'Successful',
-                        detail: err,
-                        life: 3000
-                    });
-                    return throwError(() => err);
+                    this.showError(err);
+                    return [];
                 }),
-
-                finalize(() => {
-                    this.ngOnInit();
-                    this.isLoading = false;
-                }),
+                finalize(() => (this.isLoading = false)),
                 takeUntilDestroyed(this.destroyRef)
             )
             .subscribe();
-
-        this.locationDialog = false;
     }
 
     getCityWeather() {
-        this.submitted = true;
+        if (!this.newLocation) {
+            this.showError('City name is required');
+            return;
+        }
+
         this.isLoading = true;
 
         this.weatherService
             .getCurrentWeather(this.newLocation)
             .pipe(
                 tap((res) => {
-                    console.log('Retrieved successfully:', res);
                     this.cityWeather = res;
                     this.show = true;
-                    this.messageService.add({
-                        severity: 'success',
-                        summary: 'Successful',
-                        detail: 'Product Created',
-                        life: 3000
-                    });
+                    this.showSuccess('Weather retrieved successfully');
                 }),
-
                 catchError((err) => {
-                    this.messageService.add({
-                        severity: 'fail',
-                        summary: 'Successful',
-                        detail: err,
-                        life: 3000
-                    });
-                    return throwError(() => err);
+                    this.showError(err);
+                    return [];
                 }),
-
-                finalize(() => {
-                    this.ngOnInit();
-                    this.isLoading = false;
-                }),
+                finalize(() => (this.isLoading = false)),
                 takeUntilDestroyed(this.destroyRef)
             )
             .subscribe();
@@ -560,32 +515,15 @@ export class Crud implements OnInit {
         this.weatherService
             .refreshWeather(location.id)
             .pipe(
-                tap((res) => {
-                    console.log('Retrieved successfully:', res);
-                    this.cityWeather = res;
-                    this.show = true;
-                    this.messageService.add({
-                        severity: 'success',
-                        summary: 'Successful',
-                        detail: 'Product Created',
-                        life: 3000
-                    });
+                tap(() => {
+                    this.showSuccess('Weather synced successfully');
+                    this.loadLocations();
                 }),
-
                 catchError((err) => {
-                    this.messageService.add({
-                        severity: 'fail',
-                        summary: 'Successful',
-                        detail: err,
-                        life: 3000
-                    });
-                    return throwError(() => err);
+                    this.showError(err);
+                    return [];
                 }),
-
-                finalize(() => {
-                    this.ngOnInit();
-                    this.isLoading = false;
-                }),
+                finalize(() => (this.isLoading = false)),
                 takeUntilDestroyed(this.destroyRef)
             )
             .subscribe();
@@ -597,38 +535,26 @@ export class Crud implements OnInit {
     }
 
     getCityForecast() {
-        this.submitted = true;
+        if (!this.newLocation) {
+            this.showError('City name is required');
+            return;
+        }
+
         this.isLoading = true;
 
         this.weatherService
             .getCurrentForecast(this.newLocation)
             .pipe(
                 tap((res) => {
-                    console.log('Retrieved successfully:', res);
                     this.selectedForecast = res;
                     this.showForecast = true;
-                    this.messageService.add({
-                        severity: 'success',
-                        summary: 'Successful',
-                        detail: 'Forecast Retrieved successfully',
-                        life: 3000
-                    });
+                    this.showSuccess('Forecast retrieved successfully');
                 }),
-
                 catchError((err) => {
-                    this.messageService.add({
-                        severity: 'fail',
-                        summary: 'Successful',
-                        detail: err,
-                        life: 3000
-                    });
-                    return throwError(() => err);
+                    this.showError(err);
+                    return [];
                 }),
-
-                finalize(() => {
-                    this.ngOnInit();
-                    this.isLoading = false;
-                }),
+                finalize(() => (this.isLoading = false)),
                 takeUntilDestroyed(this.destroyRef)
             )
             .subscribe();
