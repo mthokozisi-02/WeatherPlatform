@@ -13,7 +13,7 @@ namespace WeatherPlatform.Api.Controllers
         private readonly ILocationService _locationService = locationService;
 
         [HttpPost("create-location")]
-        public async Task<IActionResult> CreateLocation(string city)
+        public async Task<IActionResult> CreateLocation([FromBody] CreateLocationDto city)
         {
             return Ok(await _locationService.CreateLocation(city));
         }

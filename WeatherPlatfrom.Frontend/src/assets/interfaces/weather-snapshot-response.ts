@@ -1,4 +1,5 @@
 export interface WeatherSnapshotResponse {
+    id: number;
     city: string;
     country: string;
     latitude: number;
@@ -7,4 +8,5 @@ export interface WeatherSnapshotResponse {
     humidity: number;
     description: string;
     lastSyncedAt: Date;
+    forecastSnapshots: any;
 }

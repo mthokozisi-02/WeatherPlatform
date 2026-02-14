@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using WeatherPlatform.Domain.Dtos;
 using WeatherPlatform.Infrastructure.Interfaces;
 
 namespace WeatherPlatform.Api.Controllers
@@ -11,22 +12,22 @@ namespace WeatherPlatform.Api.Controllers
     {
         private readonly IWeatherService _weatherService = weatherService;
 
-        [HttpGet("current-weather")]
-        public async Task<IActionResult> GetCurrentWeather([FromQuery] string city)
+        [HttpPost("current-weather")]
+        public async Task<IActionResult> GetCurrentWeather([FromBody] CreateLocationDto city)
         {
-            return Ok(await _weatherService.GetCurrentWeather(city));
+            return Ok(await _weatherService.GetCurrentWeather(city.Name));
         }
 
         [HttpPost("refresh-weather")]
-        public async Task<IActionResult> RefreshWeather(int locationId)
+        public async Task<IActionResult> RefreshWeather([FromBody] int locationId)
         {
             return Ok(await _weatherService.RefreshWeather(locationId));
         }
 
-        [HttpGet("current-forecast")]
-        public async Task<IActionResult> GetForecast([FromQuery] string city)
+        [HttpPost("current-forecast")]
+        public async Task<IActionResult> GetForecast([FromBody] CreateLocationDto city)
         {
-            return Ok(await _weatherService.GetForecast(city));
+            return Ok(await _weatherService.GetForecast(city.Name));
         }
 
         [HttpPost("refresh-forecast")]

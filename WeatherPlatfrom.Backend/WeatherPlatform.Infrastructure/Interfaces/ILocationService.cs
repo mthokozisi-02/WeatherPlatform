@@ -10,7 +10,7 @@ namespace WeatherPlatform.Infrastructure.Interfaces
 {
     public interface ILocationService
     {
-        Task<WeatherResponseDto> CreateLocation(string city);
+        Task<WeatherResponseDto> CreateLocation(CreateLocationDto city);
         Task<Location> UpdateLocation(UpdateLocationDto updatedLocation);
         Task<List<WeatherSnapshotResponseDto>> GetAll();
         Task<string> DeleteLocation(int id);

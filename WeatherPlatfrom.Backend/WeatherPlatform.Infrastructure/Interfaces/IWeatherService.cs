@@ -4,13 +4,14 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using WeatherPlatform.Domain.Dtos;
+using WeatherPlatform.Domain.Entities;
 
 namespace WeatherPlatform.Infrastructure.Interfaces
 {
     public interface IWeatherService
     {
         Task<WeatherResponseDto> GetCurrentWeather(string city);
-        Task<string> RefreshWeather (int locationId);
+        Task<WeatherSnapshot> RefreshWeather (int locationId);
         Task<ForecastWeatherResponseDto> GetForecast (string city);
 
         Task<ForecastWeatherResponseDto> RefreshForecast(int locationId);

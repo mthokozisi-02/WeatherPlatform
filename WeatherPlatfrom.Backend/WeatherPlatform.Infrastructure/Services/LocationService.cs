@@ -15,15 +15,15 @@ namespace WeatherPlatform.Infrastructure.Services
     {
         private readonly IWeatherService _weatherService = weatherService;
         private readonly WeatherPlatfromDbContext _weatherPlatfromDbContext = weatherPlatfromDbContext;
-        public async Task<WeatherResponseDto> CreateLocation(string city)
+        public async Task<WeatherResponseDto> CreateLocation(CreateLocationDto city)
         {
-            var exist = _weatherPlatfromDbContext.Locations.FirstOrDefault(x => x.City == city);
+            var exist = _weatherPlatfromDbContext.Locations.FirstOrDefault(x => x.City == city.Name);
             if (exist == null)
             {
-                var weatherResponse = await _weatherService.GetCurrentWeather(city);
+                var weatherResponse = await _weatherService.GetCurrentWeather(city.Name);
                 var location = new Domain.Entities.Location
                 {
-                    City = city,
+                    City = city.Name,
                     Country = weatherResponse.sys.country,
                     Latitude = weatherResponse.coord.lat,
                     Longitude = weatherResponse.coord.lon,
@@ -57,11 +57,14 @@ namespace WeatherPlatform.Infrastructure.Services
         public async Task<List<WeatherSnapshotResponseDto>> GetAll()
         {
             var locations = await _weatherPlatfromDbContext.Locations
+                .Where(l => l.IsDeleted == false)
                 .Include(l => l.WeatherSnapshots.OrderByDescending(ws => ws.CreatedAt).Take(1))
+                .Include(l => l.ForecastSnapshots.OrderByDescending(fs => fs.CreatedAt).Take(40).Where(fs => fs.ForecastDate.Hour == 12))
                 .ToListAsync();
 
             var snapshots = locations.Select(l => l.WeatherSnapshots.FirstOrDefault()).Where(ws => ws != null).Select(ws => new WeatherSnapshotResponseDto
             {
+                Id = ws.LocationId,
                 City = ws.Location.City,
                 Country = ws.Location.Country,
                 latitude = ws.Location.Latitude,
@@ -70,7 +73,8 @@ namespace WeatherPlatform.Infrastructure.Services
                 Humidity = ws.Humidity,
                 Description = ws.Description,
                 LastSyncedAt = ws.CreatedAt,
-                IsFavorite = ws.Location.IsFavorite
+                IsFavorite = ws.Location.IsFavorite,
+                forecastSnapshots = ws.Location.ForecastSnapshots
             }).ToList();
 
             return snapshots;

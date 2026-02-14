@@ -1,4 +1,6 @@
 export interface WeatherResponse {
+    city: string;
+    id: string | undefined;
     main: MainInfo;
     weather: WeatherInfo[];
     sys: SystemInfo;

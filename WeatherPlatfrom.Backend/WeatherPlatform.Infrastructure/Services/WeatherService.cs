@@ -58,7 +58,7 @@ namespace WeatherPlatform.Infrastructure.Services
             return result;
         }
 
-        public async Task<string> RefreshWeather(int locationId)
+        public async Task<WeatherSnapshot> RefreshWeather(int locationId)
         {
             var location = await _weatherPlatfromDbContext.Locations
                 .FirstOrDefaultAsync(l => l.Id == locationId) ?? throw new Exception("Location not found");
@@ -81,11 +81,11 @@ namespace WeatherPlatform.Infrastructure.Services
 
                 await _weatherPlatfromDbContext.SaveChangesAsync();
 
-                return "Weather refreshed successfully";
+                return snapshot;
             }
             catch (Exception ex)
             {
-                return ex.Message;
+                throw new Exception("Failed to refresh weather data: " + ex.Message);
             }
             
         }
@@ -103,7 +103,19 @@ namespace WeatherPlatform.Infrastructure.Services
 
             var content = await response.Content.ReadAsStringAsync();
 
-            return JsonSerializer.Deserialize<ForecastWeatherResponseDto>(content)!;
+            var results = JsonSerializer.Deserialize<ForecastWeatherResponseDto>(content)!;
+
+            results.list = results.list.Where(item =>
+            {
+                var forecastDate = DateTime.ParseExact(
+                    item.dt_txt,
+                    "yyyy-MM-dd HH:mm:ss",
+                    CultureInfo.InvariantCulture
+                );
+                return forecastDate.Hour == 12;
+            }).ToList();
+
+            return results;
         }
 
         public async Task<ForecastWeatherResponseDto> RefreshForecast(int locationId)

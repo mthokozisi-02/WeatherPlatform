@@ -4,11 +4,13 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using WeatherPlatform.Domain.Entities;
 
 namespace WeatherPlatform.Domain.Dtos
 {
     public class WeatherSnapshotResponseDto
     {
+        public int Id { get; set; }
         public string City { get; set; }
         public string Country { get; set; }
         public double latitude { get; set; }
@@ -18,5 +20,7 @@ namespace WeatherPlatform.Domain.Dtos
         public string Description { get; set; }
         public bool IsFavorite { get; set; }
         public DateTime LastSyncedAt { get; set; }
+
+        public ICollection<ForecastSnapshot> forecastSnapshots { get; set; }
     }
 }

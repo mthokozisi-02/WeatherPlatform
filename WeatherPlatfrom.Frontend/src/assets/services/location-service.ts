@@ -13,9 +13,10 @@ const apiUrl = 'https://localhost:7107/api';
 export class LocationService {
     constructor(private http: HttpClient) {}
 
-    createLocation(city: string): Observable<WeatherResponse> {
-        console.log(city);
-        return this.http.post<WeatherResponse>(`${apiUrl}/create-location`, city);
+    createLocation(name: string): Observable<WeatherResponse> {
+        const body = { name };
+        console.log(body);
+        return this.http.post<WeatherResponse>(`${apiUrl}/create-location`, body);
     }
 
     updateLocation(location: UpdateLocation): Observable<any> {

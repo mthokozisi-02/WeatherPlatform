@@ -24,17 +24,10 @@ import { LocationService } from 'src/assets/services/location-service';
 import { catchError, finalize, tap, throwError } from 'rxjs';
 
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-
-interface Column {
-    field: string;
-    header: string;
-    customExportHeader?: string;
-}
-
-interface ExportColumn {
-    title: string;
-    dataKey: string;
-}
+import { UpdateLocation } from 'src/assets/interfaces/update-location';
+import { WeatherSnapshotResponse } from 'src/assets/interfaces/weather-snapshot-response';
+import { WeatherService } from 'src/assets/services/weather-service';
+import { ForecastWeatherResponse } from 'src/assets/interfaces/forecast-weather-response';
 
 @Component({
     selector: 'app-crud',
@@ -63,11 +56,8 @@ interface ExportColumn {
         <p-toolbar styleClass="mb-6">
             <ng-template #start>
                 <p-button label="New" icon="pi pi-plus" severity="secondary" class="mr-2" (onClick)="openNew()" />
-                <p-button severity="secondary" label="Delete" icon="pi pi-trash" outlined (onClick)="deleteSelectedProducts()" [disabled]="!selectedProducts || !selectedProducts.length" />
-            </ng-template>
-
-            <ng-template #end>
-                <p-button label="Export" icon="pi pi-upload" severity="secondary" (onClick)="exportCSV()" />
+                <p-button label="Check Weather" icon="pi pi-search" class="mr-2" (click)="checkWeather()" />
+                <p-button label="Check Forecast" icon="pi pi-search" (click)="checkForecast()" />
             </ng-template>
         </p-toolbar>
 
@@ -75,11 +65,9 @@ interface ExportColumn {
             #dt
             [value]="locations()"
             [rows]="10"
-            [columns]="cols"
             [paginator]="true"
             [globalFilterFields]="['city', 'country']"
             [tableStyle]="{ 'min-width': '75rem' }"
-            [(selection)]="selectedProducts"
             [rowHover]="true"
             dataKey="id"
             currentPageReportTemplate="Showing {first} to {last} of {totalRecords} products"
@@ -97,93 +85,74 @@ interface ExportColumn {
             </ng-template>
             <ng-template #header>
                 <tr>
-                    <th style="width: 3rem">
-                        <p-tableHeaderCheckbox />
-                    </th>
-                    <th style="min-width: 16rem">Country</th>
-                    <th pSortableColumn="name" style="min-width:16rem">
+                    <th style="width: 3rem"></th>
+                    <th style="min-width: 3rem">Country</th>
+                    <th pSortableColumn="name" style="min-width:8rem">
                         City
                         <p-sortIcon field="name" />
                     </th>
-                    <th pSortableColumn="price" style="min-width: 8rem">
-                        Latitude
-                        <p-sortIcon field="price" />
-                    </th>
-                    <th pSortableColumn="category" style="min-width:10rem">
-                        Longitude
-                        <p-sortIcon field="category" />
-                    </th>
-                    <th pSortableColumn="category" style="min-width:10rem">Temperature</th>
-                    <th pSortableColumn="category" style="min-width:10rem">Humidity</th>
-                    <th pSortableColumn="category" style="min-width:10rem">Description</th>
-                    <th pSortableColumn="category" style="min-width:10rem">LastSyncedAt</th>
+                    <th pSortableColumn="price" style="min-width: 6rem">Latitude</th>
+                    <th pSortableColumn="category" style="min-width:6rem">Longitude</th>
+                    <th pSortableColumn="category" style="min-width:6rem">Temperature</th>
+                    <th pSortableColumn="category" style="min-width:6rem">Humidity</th>
+                    <th pSortableColumn="category" style="min-width:12rem">Description</th>
+                    <th pSortableColumn="category" style="min-width:12rem">LastSyncedAt</th>
                     <th style="min-width: 12rem"></th>
                 </tr>
             </ng-template>
             <ng-template #body let-location>
                 <tr>
                     <td style="width: 3rem">
-                        <p-tableCheckbox [value]="location" />
+                        <i *ngIf="location.isFavorite" class="pi pi-heart text-red-500"> </i>
                     </td>
-                    <td style="min-width: 12rem">{{ location.country }}</td>
-                    <td style="min-width: 16rem">{{ location.city }}</td>
+                    <td style="min-width: 6rem">{{ location.country }}</td>
+                    <td style="min-width: 8rem">{{ location.city }}</td>
+                    <td style="min-width: 6rem">{{ location.latitude }}</td>
+                    <td style="min-width: 6rem">{{ location.longitude }}</td>
+                    <td style="min-width: 6rem">{{ location.temp }}</td>
+                    <td style="min-width: 6rem">{{ location.humidity }}</td>
+                    <td style="min-width: 12rem">{{ location.description }}</td>
+                    <td style="min-width: 12rem">{{ location.lastSyncedAt | date: 'yyyy-MM-dd HH:mm' }}</td>
                     <td>
-                        <p-button icon="pi pi-pencil" class="mr-2" [rounded]="true" [outlined]="true" (click)="editProduct(location)" />
-                        <p-button icon="pi pi-trash" severity="danger" [rounded]="true" [outlined]="true" (click)="deleteProduct(location)" />
+                        <p-button icon="pi pi-pencil" class="mr-2" [rounded]="true" [outlined]="true" (click)="editLocation(location)" />
+                        <p-button icon="pi pi-trash" severity="danger" class="mr-2" [rounded]="true" [outlined]="true" (click)="deleteLocation(location)" />
+                        <p-button label="Sync" [rounded]="true" [outlined]="true" class="mr-2" (click)="refreshWeather(location)" />
+                        <p-button label="Forecast" [rounded]="true" [outlined]="true" (click)="viewForecast(location)" />
                     </td>
                 </tr>
             </ng-template>
         </p-table>
 
-        <p-dialog [(visible)]="productDialog" [style]="{ width: '450px' }" header="Product Details" [modal]="true">
+        <p-dialog [(visible)]="locationDialog" [style]="{ width: '450px' }" header="Location Details" [modal]="true">
             <ng-template #content>
                 <div class="flex flex-col gap-6">
-                    <img [src]="'https://primefaces.org/cdn/primeng/images/demo/product/' + product.image" [alt]="product.image" class="block m-auto pb-4" *ngIf="product.image" />
                     <div>
                         <label for="name" class="block font-bold mb-3">Name</label>
-                        <input type="text" pInputText id="name" [(ngModel)]="product.name" required autofocus fluid />
-                        <small class="text-red-500" *ngIf="submitted && !product.name">Name is required.</small>
+                        <input type="text" pInputText id="name" [(ngModel)]="newLocation" required autofocus fluid />
+                        <small class="text-red-500" *ngIf="submitted && !newLocation">Name is required.</small>
                     </div>
-                    <div>
-                        <label for="description" class="block font-bold mb-3">Description</label>
-                        <textarea id="description" pTextarea [(ngModel)]="product.description" required rows="3" cols="20" fluid></textarea>
-                    </div>
+                </div>
+            </ng-template>
 
-                    <div>
-                        <label for="inventoryStatus" class="block font-bold mb-3">Inventory Status</label>
-                        <p-select [(ngModel)]="product.inventoryStatus" inputId="inventoryStatus" [options]="statuses" optionLabel="label" optionValue="label" placeholder="Select a Status" fluid />
-                    </div>
+            <ng-template #footer>
+                <p-button label="Cancel" icon="pi pi-times" text (click)="hideDialog()" />
+                <p-button label="Save" icon="pi pi-check" (click)="saveLocation()" />
+            </ng-template>
+        </p-dialog>
 
+        <p-dialog [(visible)]="updateLocationDialog" [style]="{ width: '450px' }" header="Location Details" [modal]="true">
+            <ng-template #content>
+                <div class="flex flex-col gap-6">
                     <div>
-                        <span class="block font-bold mb-4">Category</span>
-                        <div class="grid grid-cols-12 gap-4">
-                            <div class="flex items-center gap-2 col-span-6">
-                                <p-radiobutton id="category1" name="category" value="Accessories" [(ngModel)]="product.category" />
-                                <label for="category1">Accessories</label>
+                        <div class="flex flex-col md:flex-row gap-4">
+                            <div class="flex items-center">
+                                <p-radiobutton id="option1" name="option" value="true" [(ngModel)]="favorite" />
+                                <label for="option1" class="leading-none ml-2">Favorite</label>
                             </div>
-                            <div class="flex items-center gap-2 col-span-6">
-                                <p-radiobutton id="category2" name="category" value="Clothing" [(ngModel)]="product.category" />
-                                <label for="category2">Clothing</label>
+                            <div class="flex items-center">
+                                <p-radiobutton id="option2" name="option" value="false" [(ngModel)]="favorite" />
+                                <label for="option2" class="leading-none ml-2">Not Favorite</label>
                             </div>
-                            <div class="flex items-center gap-2 col-span-6">
-                                <p-radiobutton id="category3" name="category" value="Electronics" [(ngModel)]="product.category" />
-                                <label for="category3">Electronics</label>
-                            </div>
-                            <div class="flex items-center gap-2 col-span-6">
-                                <p-radiobutton id="category4" name="category" value="Fitness" [(ngModel)]="product.category" />
-                                <label for="category4">Fitness</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-12 gap-4">
-                        <div class="col-span-6">
-                            <label for="price" class="block font-bold mb-3">Price</label>
-                            <p-inputnumber id="price" [(ngModel)]="product.price" mode="currency" currency="USD" locale="en-US" fluid />
-                        </div>
-                        <div class="col-span-6">
-                            <label for="quantity" class="block font-bold mb-3">Quantity</label>
-                            <p-inputnumber id="quantity" [(ngModel)]="product.quantity" fluid />
                         </div>
                     </div>
                 </div>
@@ -191,7 +160,121 @@ interface ExportColumn {
 
             <ng-template #footer>
                 <p-button label="Cancel" icon="pi pi-times" text (click)="hideDialog()" />
-                <p-button label="Save" icon="pi pi-check" (click)="saveProduct()" />
+                <p-button label="Save" icon="pi pi-check" (click)="updateLocation()" />
+            </ng-template>
+        </p-dialog>
+
+        <p-dialog [(visible)]="searchLocationDialog" [style]="{ width: '450px' }" header="Location Details" [modal]="true">
+            <ng-template #content>
+                <div class="flex flex-col gap-6">
+                    <div>
+                        <label for="name" class="block font-bold mb-3">Name</label>
+                        <input type="text" pInputText id="name" [(ngModel)]="newLocation" required autofocus fluid />
+                        <small class="text-red-500" *ngIf="submitted && !newLocation">Name is required.</small>
+                    </div>
+                    <div *ngIf="show" class="flex flex-col md:flex-row gap-8">
+                        <div class="flex items-center gap-2">
+                            <label for="name" class="font-bold mb-3">Latitude:</label>
+                            <label for="name" class="font-bold mb-3 text-red-500">{{ cityWeather.coord.lat }}</label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label for="name" class="font-bold mb-3">Longitude:</label>
+                            <label for="name" class="font-bold mb-3 text-red-500">{{ cityWeather.coord.lon! }}</label>
+                        </div>
+                    </div>
+                    <div *ngIf="show" class="flex flex-col md:flex-row gap-8">
+                        <div class="flex items-center gap-2">
+                            <label for="name" class="font-bold mb-3">Temperature:</label>
+                            <label for="name" class="font-bold mb-3 text-red-500">{{ cityWeather.main.temp }}</label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label for="name" class="font-bold mb-3">Humidity:</label>
+                            <label for="name" class="font-bold mb-3 text-red-500">{{ cityWeather.main.humidity }}</label>
+                        </div>
+                    </div>
+                    <div *ngIf="show" class="flex flex-col md:flex-row gap-8">
+                        <div class="flex items-center gap-2">
+                            <label for="name" class="font-bold mb-3">Country:</label>
+                            <label for="name" class="font-bold mb-3 text-red-500">{{ cityWeather.sys.country }}</label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label for="name" class="font-bold mb-3">Description:</label>
+                            <label for="name" class="font-bold mb-3 text-red-500">{{ cityWeather.weather[0].description }}</label>
+                        </div>
+                    </div>
+                </div>
+            </ng-template>
+
+            <ng-template #footer>
+                <p-button label="Cancel" icon="pi pi-times" text (click)="hideDialog()" />
+                <p-button label="Current Weather" icon="pi pi-check" (click)="getCityWeather()" />
+            </ng-template>
+        </p-dialog>
+
+        <p-dialog [(visible)]="forecastDialog" [style]="{ width: '450px' }" header="Location Details" [modal]="true">
+            <ng-template #content>
+                <div class="flex flex-col gap-6">
+                    <div>
+                        <label for="name" class="block font-bold mb-3">Name</label>
+                        <input type="text" pInputText id="name" [(ngModel)]="newLocation" required autofocus fluid />
+                        <small class="text-red-500" *ngIf="submitted && !newLocation">Name is required.</small>
+                    </div>
+
+                    <p-table *ngIf="showForecast" #dt [value]="selectedForecast.list" [rows]="10" [rowHover]="true" dataKey="id">
+                        <ng-template #caption> </ng-template>
+                        <ng-template #header>
+                            <tr>
+                                <th style="min-width:8rem">Date</th>
+                                <th style="min-width:3rem">Temperature</th>
+                                <th style="min-width:2rem">Humidity</th>
+                                <th style="min-width:3rem">Description</th>
+                            </tr>
+                        </ng-template>
+                        <ng-template #body let-location>
+                            <tr>
+                                <td style="min-width: 8rem">{{ location.dt_txt | date: 'yyyy-MM-dd' }}</td>
+                                <td style="min-width: 3rem">{{ location.main.temp }}</td>
+                                <td style="min-width: 2rem">{{ location.main.humidity }}</td>
+                                <td style="min-width: 3rem">{{ location.weather[0].description }}</td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                </div>
+            </ng-template>
+
+            <ng-template #footer>
+                <p-button label="Cancel" icon="pi pi-times" text (click)="hideDialog()" />
+                <p-button label="Check Forecast" icon="pi pi-check" (click)="getCityForecast()" />
+            </ng-template>
+        </p-dialog>
+
+        <p-dialog [(visible)]="viewforecastDialog" [style]="{ width: '450px' }" header="Location Details" [modal]="true">
+            <ng-template #content>
+                <div class="flex flex-col gap-6">
+                    <p-table #dt [value]="selectedLocation.forecastSnapshots" [rows]="10" [rowHover]="true" dataKey="id">
+                        <ng-template #caption> </ng-template>
+                        <ng-template #header>
+                            <tr>
+                                <th style="min-width:8rem">Date</th>
+                                <th style="min-width:3rem">Temperature</th>
+                                <th style="min-width:2rem">Humidity</th>
+                                <th style="min-width:3rem">Description</th>
+                            </tr>
+                        </ng-template>
+                        <ng-template #body let-location>
+                            <tr>
+                                <td style="min-width: 8rem">{{ location.forecastDate | date: 'yyyy-MM-dd' }}</td>
+                                <td style="min-width: 3rem">{{ location.temperature }}</td>
+                                <td style="min-width: 2rem">{{ location.humidity }}</td>
+                                <td style="min-width: 3rem">{{ location.description }}</td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                </div>
+            </ng-template>
+
+            <ng-template #footer>
+                <p-button label="Cancel" icon="pi pi-times" text (click)="hideDialog()" />
             </ng-template>
         </p-dialog>
 
@@ -200,40 +283,50 @@ interface ExportColumn {
     providers: [MessageService, ProductService, ConfirmationService]
 })
 export class Crud implements OnInit {
-    locations = signal<WeatherResponse[]>([]);
+    locations = signal<WeatherSnapshotResponse[]>([]);
 
-    productDialog: boolean = false;
+    forecasts = signal<ForecastWeatherResponse[]>([]);
 
-    products = signal<Product[]>([]);
+    selectedForecast: ForecastWeatherResponse = {} as ForecastWeatherResponse;
 
-    product!: Product;
+    newLocation: any;
 
-    selectedProducts!: Product[] | null;
+    show = false;
+
+    showForecast = false;
+
+    cityWeather: WeatherResponse = {} as WeatherResponse;
+
+    selectedLocation: WeatherSnapshotResponse = {} as WeatherSnapshotResponse;
+
+    favorite = '';
+
+    forecastDialog: boolean = false;
+
+    viewforecastDialog: boolean = false;
+
+    locationDialog: boolean = false;
+
+    updateLocationDialog: boolean = false;
+
+    searchLocationDialog: boolean = false;
+
+    location!: UpdateLocation;
 
     submitted: boolean = false;
 
-    statuses!: any[];
-
     @ViewChild('dt') dt!: Table;
-
-    exportColumns!: ExportColumn[];
-
-    cols!: Column[];
 
     isLoading = false;
 
     private destroyRef = inject(DestroyRef);
 
     constructor(
-        private productService: ProductService,
         private locationService: LocationService,
         private messageService: MessageService,
-        private confirmationService: ConfirmationService
+        private confirmationService: ConfirmationService,
+        private weatherService: WeatherService
     ) {}
-
-    exportCSV() {
-        this.dt.exportCSV();
-    }
 
     ngOnInit() {
         this.loadLocations();
@@ -246,12 +339,17 @@ export class Crud implements OnInit {
             .getAll()
             .pipe(
                 tap((res) => {
-                    this.locations = res;
+                    this.locations.set(res);
                     console.log('Retrieved successfully:', res);
                 }),
 
                 catchError((err) => {
-                    console.error('Login failed:', err);
+                    this.messageService.add({
+                        severity: 'fail',
+                        summary: 'Successful',
+                        detail: err,
+                        life: 3000
+                    });
                     return throwError(() => err);
                 }),
 
@@ -263,145 +361,276 @@ export class Crud implements OnInit {
             .subscribe();
     }
 
-    loadDemoData() {
-        this.productService.getProducts().then((data) => {
-            this.products.set(data);
-        });
-
-        this.statuses = [
-            { label: 'INSTOCK', value: 'instock' },
-            { label: 'LOWSTOCK', value: 'lowstock' },
-            { label: 'OUTOFSTOCK', value: 'outofstock' }
-        ];
-
-        this.cols = [
-            { field: 'code', header: 'Code', customExportHeader: 'Product Code' },
-            { field: 'name', header: 'Name' },
-            { field: 'image', header: 'Image' },
-            { field: 'price', header: 'Price' },
-            { field: 'category', header: 'Category' }
-        ];
-
-        this.exportColumns = this.cols.map((col) => ({ title: col.header, dataKey: col.field }));
-    }
-
     onGlobalFilter(table: Table, event: Event) {
         table.filterGlobal((event.target as HTMLInputElement).value, 'contains');
     }
 
     openNew() {
-        this.product = {};
         this.submitted = false;
-        this.productDialog = true;
+        this.locationDialog = true;
     }
 
-    editProduct(product: Product) {
-        this.product = { ...product };
-        this.productDialog = true;
+    editLocation(location: UpdateLocation) {
+        this.favorite = '';
+        this.location = { ...location };
+        this.updateLocationDialog = true;
     }
 
-    deleteSelectedProducts() {
-        this.confirmationService.confirm({
-            message: 'Are you sure you want to delete the selected products?',
-            header: 'Confirm',
-            icon: 'pi pi-exclamation-triangle',
-            accept: () => {
-                this.products.set(this.products().filter((val) => !this.selectedProducts?.includes(val)));
-                this.selectedProducts = null;
-                this.messageService.add({
-                    severity: 'success',
-                    summary: 'Successful',
-                    detail: 'Products Deleted',
-                    life: 3000
-                });
-            }
-        });
+    checkForecast() {
+        this.forecastDialog = true;
+    }
+
+    checkWeather() {
+        this.searchLocationDialog = true;
+    }
+
+    updateLocation() {
+        this.submitted = true;
+        this.isLoading = true;
+
+        if (this.favorite === 'true') {
+            this.location.isFavorite = true;
+        } else {
+            this.location.isFavorite = false;
+        }
+
+        this.locationService
+            .updateLocation(this.location)
+            .pipe(
+                tap((res) => {
+                    console.log('Updated successfully:', res);
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Successful',
+                        detail: 'Product Updated',
+                        life: 3000
+                    });
+                }),
+
+                catchError((err) => {
+                    this.messageService.add({
+                        severity: 'fail',
+                        summary: 'Not Successful',
+                        detail: 'location not updated',
+                        life: 3000
+                    });
+                    return throwError(() => err);
+                }),
+
+                finalize(() => {
+                    this.ngOnInit();
+                    this.isLoading = false;
+                }),
+                takeUntilDestroyed(this.destroyRef)
+            )
+            .subscribe();
+
+        this.updateLocationDialog = false;
     }
 
     hideDialog() {
-        this.productDialog = false;
+        this.locationDialog = false;
+        this.updateLocationDialog = false;
+        this.searchLocationDialog = false;
+        this.forecastDialog = false;
+        this.viewforecastDialog = false;
+        this.show = false;
         this.submitted = false;
     }
 
-    deleteProduct(product: Product) {
+    deleteLocation(location: WeatherSnapshotResponse) {
         this.confirmationService.confirm({
-            message: 'Are you sure you want to delete ' + product.name + '?',
+            message: 'Are you sure you want to delete ' + location.city + '?',
             header: 'Confirm',
             icon: 'pi pi-exclamation-triangle',
             accept: () => {
-                this.products.set(this.products().filter((val) => val.id !== product.id));
-                this.product = {};
-                this.messageService.add({
-                    severity: 'success',
-                    summary: 'Successful',
-                    detail: 'Product Deleted',
-                    life: 3000
-                });
+                this.locationService
+                    .deleteLocation(location.id)
+                    .pipe(
+                        tap((res) => {
+                            console.log('Deleted successfully:', res);
+                            this.messageService.add({
+                                severity: 'success',
+                                summary: 'Successful',
+                                detail: 'Product Created',
+                                life: 3000
+                            });
+                        }),
+
+                        catchError((err) => {
+                            this.messageService.add({
+                                severity: 'fail',
+                                summary: 'Successful',
+                                detail: err,
+                                life: 3000
+                            });
+                            return throwError(() => err);
+                        }),
+
+                        finalize(() => {
+                            this.ngOnInit();
+                            this.isLoading = false;
+                        }),
+                        takeUntilDestroyed(this.destroyRef)
+                    )
+                    .subscribe();
             }
         });
     }
 
-    findIndexById(id: string): number {
-        let index = -1;
-        for (let i = 0; i < this.products().length; i++) {
-            if (this.products()[i].id === id) {
-                index = i;
-                break;
-            }
-        }
-
-        return index;
-    }
-
-    createId(): string {
-        let id = '';
-        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        for (var i = 0; i < 5; i++) {
-            id += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return id;
-    }
-
-    getSeverity(status: string) {
-        switch (status) {
-            case 'INSTOCK':
-                return 'success';
-            case 'LOWSTOCK':
-                return 'warn';
-            case 'OUTOFSTOCK':
-                return 'danger';
-            default:
-                return 'info';
-        }
-    }
-
-    saveProduct() {
+    saveLocation() {
         this.submitted = true;
-        let _products = this.products();
-        if (this.product.name?.trim()) {
-            if (this.product.id) {
-                _products[this.findIndexById(this.product.id)] = this.product;
-                this.products.set([..._products]);
-                this.messageService.add({
-                    severity: 'success',
-                    summary: 'Successful',
-                    detail: 'Product Updated',
-                    life: 3000
-                });
-            } else {
-                this.product.id = this.createId();
-                this.product.image = 'product-placeholder.svg';
-                this.messageService.add({
-                    severity: 'success',
-                    summary: 'Successful',
-                    detail: 'Product Created',
-                    life: 3000
-                });
-                this.products.set([..._products, this.product]);
-            }
+        this.isLoading = true;
 
-            this.productDialog = false;
-            this.product = {};
-        }
+        this.locationService
+            .createLocation(this.newLocation)
+            .pipe(
+                tap((res) => {
+                    console.log('Retrieved successfully:', res);
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Successful',
+                        detail: 'Product Created',
+                        life: 3000
+                    });
+                }),
+
+                catchError((err) => {
+                    this.messageService.add({
+                        severity: 'fail',
+                        summary: 'Successful',
+                        detail: err,
+                        life: 3000
+                    });
+                    return throwError(() => err);
+                }),
+
+                finalize(() => {
+                    this.ngOnInit();
+                    this.isLoading = false;
+                }),
+                takeUntilDestroyed(this.destroyRef)
+            )
+            .subscribe();
+
+        this.locationDialog = false;
+    }
+
+    getCityWeather() {
+        this.submitted = true;
+        this.isLoading = true;
+
+        this.weatherService
+            .getCurrentWeather(this.newLocation)
+            .pipe(
+                tap((res) => {
+                    console.log('Retrieved successfully:', res);
+                    this.cityWeather = res;
+                    this.show = true;
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Successful',
+                        detail: 'Product Created',
+                        life: 3000
+                    });
+                }),
+
+                catchError((err) => {
+                    this.messageService.add({
+                        severity: 'fail',
+                        summary: 'Successful',
+                        detail: err,
+                        life: 3000
+                    });
+                    return throwError(() => err);
+                }),
+
+                finalize(() => {
+                    this.ngOnInit();
+                    this.isLoading = false;
+                }),
+                takeUntilDestroyed(this.destroyRef)
+            )
+            .subscribe();
+    }
+
+    refreshWeather(location: WeatherSnapshotResponse) {
+        this.isLoading = true;
+
+        this.weatherService
+            .refreshWeather(location.id)
+            .pipe(
+                tap((res) => {
+                    console.log('Retrieved successfully:', res);
+                    this.cityWeather = res;
+                    this.show = true;
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Successful',
+                        detail: 'Product Created',
+                        life: 3000
+                    });
+                }),
+
+                catchError((err) => {
+                    this.messageService.add({
+                        severity: 'fail',
+                        summary: 'Successful',
+                        detail: err,
+                        life: 3000
+                    });
+                    return throwError(() => err);
+                }),
+
+                finalize(() => {
+                    this.ngOnInit();
+                    this.isLoading = false;
+                }),
+                takeUntilDestroyed(this.destroyRef)
+            )
+            .subscribe();
+    }
+
+    viewForecast(location: WeatherSnapshotResponse) {
+        this.selectedLocation = location;
+        this.viewforecastDialog = true;
+    }
+
+    getCityForecast() {
+        this.submitted = true;
+        this.isLoading = true;
+
+        this.weatherService
+            .getCurrentForecast(this.newLocation)
+            .pipe(
+                tap((res) => {
+                    console.log('Retrieved successfully:', res);
+                    this.selectedForecast = res;
+                    this.showForecast = true;
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Successful',
+                        detail: 'Forecast Retrieved successfully',
+                        life: 3000
+                    });
+                }),
+
+                catchError((err) => {
+                    this.messageService.add({
+                        severity: 'fail',
+                        summary: 'Successful',
+                        detail: err,
+                        life: 3000
+                    });
+                    return throwError(() => err);
+                }),
+
+                finalize(() => {
+                    this.ngOnInit();
+                    this.isLoading = false;
+                }),
+                takeUntilDestroyed(this.destroyRef)
+            )
+            .subscribe();
     }
 }
